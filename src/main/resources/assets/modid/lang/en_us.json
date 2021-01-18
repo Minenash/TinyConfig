@@ -1,0 +1,9 @@
+{
+  "example.tinyconfig.title": "Example Settings",
+  "example.tinyconfig.intTest": "Some Random Number",
+  "example.tinyconfig.intTest.tooltip": "Random Tool Tip",
+  "example.tinyconfig.dieStr": "A String of Some Sort",
+  "example.tinyconfig.dieStr.tooltip": "irrelevant",
+  "example.tinyconfig.enumTest": "Enum Test",
+  "example.tinyconfig.enumTest.tooltip": "Multiline Test\nSecond Line"
+}

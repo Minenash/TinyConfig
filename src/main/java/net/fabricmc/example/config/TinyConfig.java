@@ -27,8 +27,8 @@ import java.util.regex.Pattern;
 
 public class TinyConfig {
 
-    private static final Pattern INTEGER_ONLY = Pattern.compile("(-[0-9]+|[0-9]*)");
-    private static final Pattern DECIMAL_ONLY = Pattern.compile("-?([\\d]+\\.?[\\d]*|[\\d]*\\.?[\\d]+|)");
+    private static final Pattern INTEGER_ONLY = Pattern.compile("(-?[0-9]*)");
+    private static final Pattern DECIMAL_ONLY = Pattern.compile("-?([\\d]+\\.?[\\d]*|[\\d]*\\.?[\\d]+|\\.)");
 
     private static final List<EntryInfo> entries = new ArrayList<>();
 
@@ -40,7 +40,7 @@ public class TinyConfig {
         Map.Entry<TextFieldWidget,Text> error;
         Object defaultValue;
         Object value;
-        Object tempValue;
+        String tempValue;
         boolean inLimits = true;
     }
 
@@ -75,7 +75,7 @@ public class TinyConfig {
             else if (type == boolean.class) {
                 Function<Object,Text> func = value -> new LiteralText((Boolean) value ? "True" : "False");
                 info.widget = new AbstractMap.SimpleEntry<ButtonWidget.PressAction, Function<Object, Text>>(button -> {
-                    info.value = info.tempValue = !(Boolean) info.value;
+                    info.value = !(Boolean) info.value;
                     button.setMessage(func.apply(info.value));
                 }, func);
             }
@@ -84,7 +84,7 @@ public class TinyConfig {
                 Function<Object,Text> func = value -> new TranslatableText(translationPrefix + "enum." + type.getSimpleName() + "." + info.value.toString());
                 info.widget = new AbstractMap.SimpleEntry<ButtonWidget.PressAction, Function<Object,Text>>( button -> {
                     int index = values.indexOf(info.value) + 1;
-                    info.value = info.tempValue = values.get(index >= values.size()? 0 : index);
+                    info.value = values.get(index >= values.size()? 0 : index);
                     button.setMessage(func.apply(info.value));
                 }, func);
             }
@@ -107,7 +107,10 @@ public class TinyConfig {
         catch (Exception e) { write(); }
 
         for (EntryInfo info : entries) {
-            try { info.value = info.tempValue = info.field.get(null); }
+            try {
+                info.value = info.field.get(null);
+                info.tempValue = info.value.toString();
+            }
             catch (IllegalAccessException ignored) {}
         }
 
@@ -117,22 +120,31 @@ public class TinyConfig {
         boolean isNumber = pattern != null;
         info.widget = (BiFunction<TextFieldWidget, ButtonWidget, Predicate<String>>) (t, b) -> s -> {
             s = s.trim();
-            boolean valid = s.isEmpty() || !isNumber || pattern.matcher(s).matches();
-            Number value = s.isEmpty() || s.equals("-")? isNumber? Math.min(0,min) : 0 : f.apply(s);
-            boolean inLimits = valid && value.doubleValue() >= min && value.doubleValue() <= max;
-            if (inLimits)
-                info.value = isNumber? value : s;
-            if (valid) {
-                info.tempValue = isNumber? value : s;
-                t.setEditableColor(inLimits? 0xFFFFFFFF : 0xFFFF7777);
-                info.inLimits = inLimits;
-                b.active = entries.stream().allMatch(e -> e.inLimits);
+            if (!(s.isEmpty() || !isNumber || pattern.matcher(s).matches()))
+                return false;
+
+            Number value = 0;
+            boolean inLimits = false;
+            System.out.println(((isNumber ^ s.isEmpty())));
+            System.out.println(!s.equals("-") && !s.equals("."));
+            info.error = null;
+            if (!(isNumber && s.isEmpty()) && !s.equals("-") && !s.equals(".")) {
+                value = f.apply(s);
+                inLimits = value.doubleValue() >= min && value.doubleValue() <= max;
                 info.error = inLimits? null : new AbstractMap.SimpleEntry<>(t, new LiteralText(value.doubleValue() < min ?
                         "§cMinimum " + (isNumber? "value" : "length") + (cast? " is " + (int)min : " is " + min) :
                         "§cMaximum " + (isNumber? "value" : "length") + (cast? " is " + (int)max : " is " + max)));
             }
 
-            return valid;
+            info.tempValue = s;
+            t.setEditableColor(inLimits? 0xFFFFFFFF : 0xFFFF7777);
+            info.inLimits = inLimits;
+            b.active = entries.stream().allMatch(e -> e.inLimits);
+
+            if (inLimits)
+                info.value = isNumber? value : s;
+
+            return true;
         };
     }
 
@@ -174,15 +186,15 @@ public class TinyConfig {
             for (EntryInfo info : entries) {
                 if (info.widget instanceof Map.Entry) {
                     Map.Entry<ButtonWidget.PressAction,Function<Object,Text>> widget = (Map.Entry<ButtonWidget.PressAction, Function<Object, Text>>) info.widget;
-                    addButton(new ButtonWidget(width-85,y,info.width,20, widget.getValue().apply(info.tempValue), widget.getKey()));
+                    addButton(new ButtonWidget(width-85,y,info.width,20, widget.getValue().apply(info.value), widget.getKey()));
                 }
                 else {
                     TextFieldWidget widget = addButton(new TextFieldWidget(textRenderer, width-85, y, info.width, 20, null));
-                    widget.setText(String.valueOf(info.tempValue));
+                    widget.setText(info.tempValue);
 
                     Predicate<String> processor = ((BiFunction<TextFieldWidget, ButtonWidget, Predicate<String>>) info.widget).apply(widget,done);
                     widget.setTextPredicate(processor);
-                    processor.test(String.valueOf(info.tempValue));
+                    processor.test(info.tempValue);
 
                     children.add(widget);
                 }

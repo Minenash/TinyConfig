@@ -3,6 +3,7 @@
   "example_modid.tinyconfig.boolTest": "Enable Awesomeness",
   "example_modid.tinyconfig.intTest": "Some Random Number",
   "example_modid.tinyconfig.intTest.tooltip": "Random Tool Tip",
+  "example_modid.tinyconfig.decimalTest": "Numbers with Points",
   "example_modid.tinyconfig.dieStr": "A String of Some Sort",
   "example_modid.tinyconfig.dieStr.tooltip": "irrelevant",
   "example_modid.tinyconfig.enumTest": "Enum Test",

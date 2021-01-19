@@ -13,7 +13,7 @@ public class ExampleMod implements ModInitializer {
 	@Override
 	public void onInitialize() {
 
-		Config.init(Config.class);
+		Config.init("example", Config.class);
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			while (keyBinding.wasPressed())

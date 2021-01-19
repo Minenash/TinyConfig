@@ -16,6 +16,7 @@ import net.minecraft.text.TranslatableText;
 import java.io.IOException;
 import java.lang.annotation.*;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,11 +31,19 @@ public class TinyConfig {
     private static final Pattern INTEGER_ONLY = Pattern.compile("(-[0-9]+|[0-9]*)");
     private static final Pattern DECIMAL_ONLY = Pattern.compile("-?([\\d]+\\.?[\\d]*|[\\d]*\\.?[\\d]+|)");
 
-    private static final Map<String, Map.Entry<Object,Integer>> entries = new LinkedHashMap<>();
-    private static final Map<String, Object> tooltips = new LinkedHashMap<>();
-    private static final Map<String, Map.Entry<TextFieldWidget,String>> errors = new HashMap<>();
-    private static final Map<String, Field> fields = new HashMap<>();
-    private static final Map<String, Object> options = new HashMap<>();
+    private static final List<EntryInfo> entries = new ArrayList<>();
+
+    protected static class EntryInfo {
+        Field field;
+        Object widget;
+        int width;
+        Method dynamicTooltip;
+        Map.Entry<TextFieldWidget,Text> error;
+        Object defaultValue;
+        Object value;
+        Object tempValue;
+        boolean inLimits = true;
+    }
 
     private static String translationPrefix;
     private static Path path;
@@ -45,101 +54,82 @@ public class TinyConfig {
             .setPrettyPrinting()
             .create();
 
-    public static void init(Class<?> config) {
-        try {
-            TinyConfigInfo info = config.getAnnotation(TinyConfigInfo.class);
-            translationPrefix = info.modid() + ".tinyconfig.";
-            path = FabricLoader.getInstance().getConfigDir().resolve(info.modid() + ".json");
-        }
-        catch (Exception ignored) {
-            translationPrefix = config.getName() + ".tinyconfig.";
-            path = FabricLoader.getInstance().getConfigDir().resolve(config.getName() + ".json");
-        }
-
-        try {
-            gson.fromJson(Files.newBufferedReader(path), config);
-        }
-        catch (Exception e) {
-            write();
-        }
+    public static void init(String modid, Class<?> config) {
+        translationPrefix = modid + ".tinyconfig.";
+        path = FabricLoader.getInstance().getConfigDir().resolve(modid + ".json");
 
         for (Field field : config.getFields()) {
-            String name = field.getName(), tooltip;
-            double min, max;
-            int width;
-            try {
-                Entry entry = field.getAnnotation(Entry.class);
-                min = entry.minimum();
-                max = entry.maximum();
-                width = entry.width();
-                tooltip = entry.tooltip();
-
-            } catch (Exception ignored) { continue; }
+            Entry e;
+            try { e = field.getAnnotation(Entry.class); }
+            catch (Exception ignored) { continue; }
 
             Class<?> type = field.getType();
+            EntryInfo info = new EntryInfo();
+            info.width = e.width();
+            info.field = field;
 
-            if (type == int.class)         textField(name, Integer::parseInt, INTEGER_ONLY, min, max, width, true);
-            else if (type == double.class) textField(name, Double::parseDouble, DECIMAL_ONLY, min, max, width,false);
-            else if (type == String.class) textField(name, String::length, null, Math.min(min,0), Math.max(max,1), width,true);
-            else if (type == Boolean.class) {
-                entries.put(name, new AbstractMap.SimpleEntry<>((ButtonWidget.PressAction) button -> {
-                    boolean bool = !(Boolean) options.get(name);
-                    options.put(name, bool);
-                    button.setMessage(new LiteralText(String.valueOf(bool)));
-                }, width));
-            }
+            if (type == int.class)         textField(info, Integer::parseInt, INTEGER_ONLY, e.min(), e.max(), true);
+            else if (type == double.class) textField(info, Double::parseDouble, DECIMAL_ONLY, e.min(), e.max(),false);
+            else if (type == String.class) textField(info, String::length, null, Math.min(e.min(),0), Math.max(e.max(),1),true);
+            else if (type == Boolean.class)
+                info.widget = (ButtonWidget.PressAction) button -> {
+                    info.value = info.tempValue = !(Boolean) info.value;
+                    button.setMessage(new LiteralText(String.valueOf(info.value)));
+                };
             else if (type.isEnum()) {
                 List<?> values = Arrays.asList(field.getType().getEnumConstants());
-                entries.put(name, new AbstractMap.SimpleEntry<>((ButtonWidget.PressAction) button -> {
-                    Object ef = options.get(name);
-                    int index = values.indexOf(ef) + 1;
-                    ef = values.get(index >= values.size()? 0 : index);
-
-                    options.put(name, ef);
-                    button.setMessage(new TranslatableText(translationPrefix + "." + field.getType().getName() + "." + ef.toString()));
-                }, width));
+                info.widget = (ButtonWidget.PressAction) button -> {
+                    int index = values.indexOf(info.value) + 1;
+                    info.value = info.tempValue = values.get(index >= values.size()? 0 : index);
+                    System.out.println(field.getType().getName());
+                    button.setMessage(new TranslatableText(translationPrefix + "enum." + type.getSimpleName() + "." + info.value.toString()));
+                };
             }
             else
                 continue;
 
-            try {
-                options.put(name, field.get(null));
-                fields.put(name, field);
-            } catch (IllegalAccessException ignored) {}
+            entries.add(info);
+
+            try { info.defaultValue = field.get(null); }
+            catch (IllegalAccessException ignored) {}
 
             try {
-                Field f = config.getDeclaredField(tooltip);
-                f.setAccessible(true);
-                List<Text> list = (List<Text>) f.get(null);
-                if (list.size() > 0)
-                    tooltips.put(name, list);
-            } catch (Exception e) {
-                tooltips.put(name, translationPrefix + name + ".tooltip");
-            }
+                info.dynamicTooltip = config.getMethod(e.dynamicTooltip());
+                info.dynamicTooltip.setAccessible(true);
+            } catch (Exception ignored) {}
 
+        }
+
+        try { gson.fromJson(Files.newBufferedReader(path), config); }
+        catch (Exception e) { write(); }
+
+        for (EntryInfo info : entries) {
+            try { info.value = info.tempValue = info.field.get(null); }
+            catch (IllegalAccessException ignored) {}
         }
 
     }
 
-    private static void textField(String title, Function<String,Number> f, Pattern pattern, double min, double max, int width, boolean cast) {
-        entries.put(title, new AbstractMap.SimpleEntry<>((BiFunction<TextFieldWidget, ButtonWidget, Predicate<String>>) (t, b) -> s -> {
-            boolean valid = s.isEmpty() || pattern == null || pattern.matcher(s).matches();
-            Number value = s.isEmpty() ? 0 : f.apply(s);
-
-            if (valid && value.doubleValue() >= min && value.doubleValue() <= max) {
-                options.put(title, value);
-                t.setEditableColor(0xFFFFFFFF);
-                b.active = true;
-                errors.remove(title);
-            } else {
-                t.setEditableColor(0xFFFF7777);
-                b.active = false;
-                errors.put(title, new AbstractMap.SimpleEntry<>(t, value.doubleValue() < min ?
-                        "§cMinimum " + (pattern == null? "length" : "value") + (cast? " is " + (int)min : " is " + min)  :
-                        "§cMaximum " + (pattern == null? "length" : "value") + (cast? " is " + (int)max : " is " + max)));
+    private static void textField(EntryInfo info, Function<String,Number> f, Pattern pattern, double min, double max, boolean cast) {
+        boolean isNumber = pattern != null;
+        info.widget = (BiFunction<TextFieldWidget, ButtonWidget, Predicate<String>>) (t, b) -> s -> {
+            boolean valid = s.isEmpty() || !isNumber || pattern.matcher(s).matches();
+            Number value = s.isEmpty()? isNumber? Math.min(0,min) : 0 : f.apply(s.trim());
+            boolean inLimits = valid && value.doubleValue() >= min && value.doubleValue() <= max;
+            if (inLimits)
+                info.value = isNumber? value : s;
+            if (valid) {
+                info.tempValue = isNumber? value : s;
+                t.setEditableColor(inLimits? 0xFFFFFFFF : 0xFFFF7777);
+                info.inLimits = inLimits;
+                b.active = entries.stream().allMatch(e -> e.inLimits);
+                info.error = inLimits? null : new AbstractMap.SimpleEntry<>(t, new LiteralText(value.doubleValue() < min ?
+                        "§cMinimum " + (isNumber? "value" : "length") + (cast? " is " + (int)min : " is " + min) :
+                        "§cMaximum " + (isNumber? "value" : "length") + (cast? " is " + (int)max : " is " + max)));
             }
+
             return valid;
-        }, width));
+        };
     }
 
     public static void write() {
@@ -161,37 +151,36 @@ public class TinyConfig {
             super(new TranslatableText(TinyConfig.translationPrefix + "title"));
             this.parent = parent;
         }
-
-        private final List<TextFieldWidget> textFieldWidgets = new ArrayList<>();
         private final Screen parent;
 
         @Override
         protected void init() {
             super.init();
-            textFieldWidgets.clear();
 
             ButtonWidget done = this.addButton(new ButtonWidget(this.width/2 - 100,this.height - 28,200,20,
                     new TranslatableText("gui.done"), (button) -> {
-                for (Map.Entry<String, Field> entry : fields.entrySet())
-                    try {
-                        entry.getValue().set(null, options.get(entry.getKey()));
-                    } catch (IllegalAccessException ignore) {}
+                for (EntryInfo info : entries)
+                    try { info.field.set(null, info.value); }
+                    catch (IllegalAccessException ignore) {}
                 write();
                 client.openScreen(parent);
             }));
 
             int y = 45;
-            for (Map.Entry<String,Map.Entry<Object, Integer>> entry : entries.entrySet()) {
-                String text = String.valueOf(options.get(entry.getKey()));
-                if (entry.getValue().getKey() instanceof ButtonWidget.PressAction) {
-                    addButton(new ButtonWidget(width-85,y,entry.getValue().getValue(),20, new LiteralText(text), (ButtonWidget.PressAction) entry.getValue().getKey()));
+            for (EntryInfo info : entries) {
+                String text = String.valueOf(info.tempValue);
+                if (info.widget instanceof ButtonWidget.PressAction) {
+                    addButton(new ButtonWidget(width-85,y,info.width,20, new TranslatableText(text), (ButtonWidget.PressAction) info.widget));
                 }
                 else {
-                    TextFieldWidget widget = new TextFieldWidget(textRenderer, width-85, y, entry.getValue().getValue(), 20, null);
+                    TextFieldWidget widget = addButton(new TextFieldWidget(textRenderer, width-85, y, info.width, 20, null));
                     widget.setText(text);
-                    widget.setTextPredicate(((BiFunction<TextFieldWidget,ButtonWidget,Predicate<String>>) entry.getValue().getKey()).apply(widget,done));
+
+                    Predicate<String> processor = ((BiFunction<TextFieldWidget, ButtonWidget, Predicate<String>>) info.widget).apply(widget,done);
+                    widget.setTextPredicate(processor);
+                    processor.test(text);
+
                     children.add(widget);
-                    textFieldWidgets.add(widget);
                 }
                 y += 30;
             }
@@ -207,53 +196,43 @@ public class TinyConfig {
                 fill(matrices, 0, low, width, low+30-4, 0x33FFFFFF);
             }
 
-            drawCenteredText(matrices, textRenderer, title, width/2, 10, 0xFFFFFF);
+            super.render(matrices, mouseX, mouseY, delta);
+            drawCenteredText(matrices, textRenderer, title, width/2, 15, 0xFFFFFF);
 
-            int y = 20;
-            for (String entry : entries.keySet())
-                drawTextWithShadow(matrices, textRenderer, new TranslatableText(translationPrefix + entry), 10, y += 30, 0xFFFFFF);
+            int y = 40;
+            for (EntryInfo info : entries) {
+                drawTextWithShadow(matrices, textRenderer, new TranslatableText(translationPrefix + info.field.getName()), 12, y + 10, 0xFFFFFF);
 
-            for (TextFieldWidget widget : textFieldWidgets)
-                widget.render(matrices, mouseX, mouseY, delta);
-
-            y = 40;
-            for (String name : entries.keySet()) {
-                Object tooltip = tooltips.get(name);
-                if (tooltip != null) {
-                    Map.Entry<TextFieldWidget,String> error = errors.get(name);
-                    if (error != null && error.getKey().isMouseOver(mouseX,mouseY))
-                        renderTooltip(matrices, new LiteralText(error.getValue()), mouseX, mouseY);
-                    else if (mouseY >= y && mouseY <= (y + 30)) {
-                        if (tooltip instanceof List)
-                            renderTooltip(matrices, (List<Text>) tooltip, mouseX, mouseY);
-                        else if (I18n.hasTranslation(tooltip.toString())) {
-                            List<Text> list = new ArrayList<>();
-                            for (String str : I18n.translate(tooltip.toString()).split("\n"))
-                                list.add(new LiteralText(str));
-                            renderTooltip(matrices, list, mouseX, mouseY);
-                        }
+                if (info.error != null && info.error.getKey().isMouseOver(mouseX,mouseY))
+                    renderTooltip(matrices, info.error.getValue(), mouseX, mouseY);
+                else if (mouseY >= y && mouseY < (y + 30)) {
+                    if (info.dynamicTooltip != null) {
+                        try {
+                            renderTooltip(matrices, (List<Text>) info.dynamicTooltip.invoke(null, entries), mouseX, mouseY);
+                            y += 30;
+                            continue;
+                        } catch (Exception e) { e.printStackTrace(); }
+                    }
+                    String key = translationPrefix + info.field.getName() + ".tooltip";
+                    if (I18n.hasTranslation(key)) {
+                        List<Text> list = new ArrayList<>();
+                        for (String str : I18n.translate(key).split("\n"))
+                            list.add(new LiteralText(str));
+                        renderTooltip(matrices, list, mouseX, mouseY);
                     }
                 }
                 y += 30;
             }
-
-            super.render(matrices, mouseX, mouseY, delta);
         }
-    }
-
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.TYPE)
-    public @interface TinyConfigInfo {
-        String modid();
     }
 
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.FIELD)
     public @interface Entry {
-        String tooltip() default "";
+        String dynamicTooltip() default "";
         int width() default 75;
-        double minimum() default Double.MIN_NORMAL;
-        double maximum() default Double.MAX_VALUE;
+        double min() default Double.MIN_NORMAL;
+        double max() default Double.MAX_VALUE;
     }
 
 }

@@ -5,5 +5,7 @@
   "example.tinyconfig.dieStr": "A String of Some Sort",
   "example.tinyconfig.dieStr.tooltip": "irrelevant",
   "example.tinyconfig.enumTest": "Enum Test",
-  "example.tinyconfig.enumTest.tooltip": "Multiline Test\nSecond Line"
+  "example.tinyconfig.enumTest.tooltip": "Multiline Test\nSecond Line",
+  "example.tinyconfig.enum.Test.Test": "TEST",
+  "example.tinyconfig.enum.Test.ER": "er"
 }

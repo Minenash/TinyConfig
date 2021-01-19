@@ -2,7 +2,6 @@ package net.fabricmc.example.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import net.fabricmc.example.Config;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -45,6 +44,7 @@ public class TinyConfig {
         boolean inLimits = true;
     }
 
+    private static Class configClass;
     private static String translationPrefix;
     private static Path path;
 
@@ -57,6 +57,7 @@ public class TinyConfig {
     public static void init(String modid, Class<?> config) {
         translationPrefix = modid + ".tinyconfig.";
         path = FabricLoader.getInstance().getConfigDir().resolve(modid + ".json");
+        configClass = config;
 
         for (Field field : config.getFields()) {
             Entry e;
@@ -115,8 +116,9 @@ public class TinyConfig {
     private static void textField(EntryInfo info, Function<String,Number> f, Pattern pattern, double min, double max, boolean cast) {
         boolean isNumber = pattern != null;
         info.widget = (BiFunction<TextFieldWidget, ButtonWidget, Predicate<String>>) (t, b) -> s -> {
+            s = s.trim();
             boolean valid = s.isEmpty() || !isNumber || pattern.matcher(s).matches();
-            Number value = s.isEmpty()? isNumber? Math.min(0,min) : 0 : f.apply(s.trim());
+            Number value = s.isEmpty() || s.equals("-")? isNumber? Math.min(0,min) : 0 : f.apply(s);
             boolean inLimits = valid && value.doubleValue() >= min && value.doubleValue() <= max;
             if (inLimits)
                 info.value = isNumber? value : s;
@@ -137,8 +139,8 @@ public class TinyConfig {
     public static void write() {
         try {
             if (!Files.exists(path)) Files.createFile(path);
-            Files.write(path, gson.toJson(new Config()).getBytes());
-        } catch (IOException e) {
+            Files.write(path, gson.toJson(configClass.newInstance()).getBytes());
+        } catch (Exception e) {
             e.printStackTrace();
         }
 

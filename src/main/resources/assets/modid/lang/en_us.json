@@ -1,12 +1,12 @@
 {
-  "example.tinyconfig.title": "Example Settings",
-  "example.tinyconfig.boolTest": "Enable Awesomeness",
-  "example.tinyconfig.intTest": "Some Random Number",
-  "example.tinyconfig.intTest.tooltip": "Random Tool Tip",
-  "example.tinyconfig.dieStr": "A String of Some Sort",
-  "example.tinyconfig.dieStr.tooltip": "irrelevant",
-  "example.tinyconfig.enumTest": "Enum Test",
-  "example.tinyconfig.enumTest.tooltip": "Multiline Test\nSecond Line",
-  "example.tinyconfig.enum.Test.Test": "TEST",
-  "example.tinyconfig.enum.Test.ER": "er"
+  "example_modid.tinyconfig.title": "Example Settings",
+  "example_modid.tinyconfig.boolTest": "Enable Awesomeness",
+  "example_modid.tinyconfig.intTest": "Some Random Number",
+  "example_modid.tinyconfig.intTest.tooltip": "Random Tool Tip",
+  "example_modid.tinyconfig.dieStr": "A String of Some Sort",
+  "example_modid.tinyconfig.dieStr.tooltip": "irrelevant",
+  "example_modid.tinyconfig.enumTest": "Enum Test",
+  "example_modid.tinyconfig.enumTest.tooltip": "Multiline Test\nSecond Line",
+  "example_modid.tinyconfig.enum.Test.Test": "TEST",
+  "example_modid.tinyconfig.enum.Test.ER": "er"
 }

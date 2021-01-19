@@ -8,7 +8,7 @@ import net.minecraft.text.Text;
 import java.util.Collections;
 import java.util.List;
 
-public class Config extends TinyConfig {
+public class ExampleConfig extends TinyConfig {
 
     @Entry
     public static boolean boolTest = false;

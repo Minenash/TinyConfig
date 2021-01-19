@@ -71,7 +71,7 @@ public class TinyConfig {
             if (type == int.class)         textField(info, Integer::parseInt, INTEGER_ONLY, e.min(), e.max(), true);
             else if (type == double.class) textField(info, Double::parseDouble, DECIMAL_ONLY, e.min(), e.max(),false);
             else if (type == String.class) textField(info, String::length, null, Math.min(e.min(),0), Math.max(e.max(),1),true);
-            else if (type == Boolean.class)
+            else if (type == boolean.class)
                 info.widget = (ButtonWidget.PressAction) button -> {
                     info.value = info.tempValue = !(Boolean) info.value;
                     button.setMessage(new LiteralText(String.valueOf(info.value)));

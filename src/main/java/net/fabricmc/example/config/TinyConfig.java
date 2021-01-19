@@ -71,19 +71,21 @@ public class TinyConfig {
             if (type == int.class)         textField(info, Integer::parseInt, INTEGER_ONLY, e.min(), e.max(), true);
             else if (type == double.class) textField(info, Double::parseDouble, DECIMAL_ONLY, e.min(), e.max(),false);
             else if (type == String.class) textField(info, String::length, null, Math.min(e.min(),0), Math.max(e.max(),1),true);
-            else if (type == boolean.class)
-                info.widget = (ButtonWidget.PressAction) button -> {
+            else if (type == boolean.class) {
+                Function<Object,Text> func = value -> new LiteralText((Boolean) value ? "True" : "False");
+                info.widget = new AbstractMap.SimpleEntry<ButtonWidget.PressAction, Function<Object, Text>>(button -> {
                     info.value = info.tempValue = !(Boolean) info.value;
-                    button.setMessage(new LiteralText(String.valueOf(info.value)));
-                };
+                    button.setMessage(func.apply(info.value));
+                }, func);
+            }
             else if (type.isEnum()) {
                 List<?> values = Arrays.asList(field.getType().getEnumConstants());
-                info.widget = (ButtonWidget.PressAction) button -> {
+                Function<Object,Text> func = value -> new TranslatableText(translationPrefix + "enum." + type.getSimpleName() + "." + info.value.toString());
+                info.widget = new AbstractMap.SimpleEntry<ButtonWidget.PressAction, Function<Object,Text>>( button -> {
                     int index = values.indexOf(info.value) + 1;
                     info.value = info.tempValue = values.get(index >= values.size()? 0 : index);
-                    System.out.println(field.getType().getName());
-                    button.setMessage(new TranslatableText(translationPrefix + "enum." + type.getSimpleName() + "." + info.value.toString()));
-                };
+                    button.setMessage(func.apply(info.value));
+                }, func);
             }
             else
                 continue;
@@ -168,17 +170,17 @@ public class TinyConfig {
 
             int y = 45;
             for (EntryInfo info : entries) {
-                String text = String.valueOf(info.tempValue);
-                if (info.widget instanceof ButtonWidget.PressAction) {
-                    addButton(new ButtonWidget(width-85,y,info.width,20, new TranslatableText(text), (ButtonWidget.PressAction) info.widget));
+                if (info.widget instanceof Map.Entry) {
+                    Map.Entry<ButtonWidget.PressAction,Function<Object,Text>> widget = (Map.Entry<ButtonWidget.PressAction, Function<Object, Text>>) info.widget;
+                    addButton(new ButtonWidget(width-85,y,info.width,20, widget.getValue().apply(info.tempValue), widget.getKey()));
                 }
                 else {
                     TextFieldWidget widget = addButton(new TextFieldWidget(textRenderer, width-85, y, info.width, 20, null));
-                    widget.setText(text);
+                    widget.setText(String.valueOf(info.tempValue));
 
                     Predicate<String> processor = ((BiFunction<TextFieldWidget, ButtonWidget, Predicate<String>>) info.widget).apply(widget,done);
                     widget.setTextPredicate(processor);
-                    processor.test(text);
+                    processor.test(String.valueOf(info.tempValue));
 
                     children.add(widget);
                 }

@@ -1,5 +1,6 @@
 {
   "example.tinyconfig.title": "Example Settings",
+  "example.tinyconfig.boolTest": "Enable Awesomeness",
   "example.tinyconfig.intTest": "Some Random Number",
   "example.tinyconfig.intTest.tooltip": "Random Tool Tip",
   "example.tinyconfig.dieStr": "A String of Some Sort",
